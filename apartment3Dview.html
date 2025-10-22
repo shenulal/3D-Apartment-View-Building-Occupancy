@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Real Estate Project POC - 3D Apartment View</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        #container { display: flex; height: 100vh; }
+        #controls {
+            width: 300px;
+            padding: 20px;
+            background-color: #f5f5f5;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        #canvas-container { flex: 1; position: relative; }
+        #building-info {
+            width: 280px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: Arial, sans-serif;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .legend {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #e9e9e9;
+            border-radius: 4px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .color-box {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 3px;
+        }
+        .apartment-list {
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .apartment-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .vacant {
+            background-color: #ffdddd;
+        }
+        .occupied {
+            background-color: #ddffdd;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        #tooltip {
+            position: absolute;
+            background-color: rgba(0,0,0,0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+        }
+        .info-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .info-section h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 5px;
+        }
+        .info-item {
+            margin-bottom: 10px;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 3px;
+        }
+        .info-value {
+            color: #333;
+            background-color: #f8f8f8;
+            padding: 5px 8px;
+            border-radius: 3px;
+            border-left: 3px solid #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="controls">
+            <h2>Building Configuration</h2>
+
+            <div class="input-group">
+                <label for="building-name">Building Name:</label>
+                <input type="text" id="building-name" placeholder="Enter building name" value="Skyline Apartments">
+            </div>
+
+            <div class="input-group">
+                <label for="location">Location:</label>
+                <textarea id="location" placeholder="Enter building location" value="FJV3+794 - شارع أبوظبي - الفلاح - Yas Island - YS6 - Abu Dhabi"></textarea>
+            </div>
+
+            <div class="input-group">
+                <label for="owned-by">Owned by:</label>
+                <input type="text" id="owned-by" placeholder="Enter owner name" value="Aldar Properties">
+            </div>
+
+            <div class="input-group">
+                <label for="commissioned-on">Commissioned on:</label>
+                <input type="date" id="commissioned-on" value="2021-01-15">
+            </div>
+
+            <div class="input-group">
+                <label for="floors">Number of Floors:</label>
+                <input type="number" id="floors" min="1" max="20" value="5">
+            </div>
+
+            <div class="input-group">
+                <label for="apartments">Apartments per Floor:</label>
+                <input type="number" id="apartments" min="1" max="20" value="4">
+            </div>
+
+            <button id="generate">Generate Building</button>
+            
+            <div class="legend">
+                <h3>Legend</h3>
+                <div class="legend-item">
+                    <div class="color-box" style="background-color: #ff0000;"></div>
+                    <span>Vacant Apartment</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box" style="background-color: #00ff00;"></div>
+                    <span>Occupied Apartment</span>
+                </div>
+            </div>
+            
+            <div class="apartment-list" id="apartment-list">
+                <h3>Apartments</h3>
+                <p>Click on an apartment to toggle occupancy</p>
+                <div id="list-container"></div>
+            </div>
+        </div>
+        
+        <div id="canvas-container">
+            <div id="instructions">
+                Click and drag to rotate | Scroll to zoom | Hover over apartments for details
+            </div>
+            <div id="tooltip"></div>
+        </div>
+
+        <div id="building-info">
+            <div class="info-section">
+                <h3>Building Information</h3>
+                <div class="info-item">
+                    <div class="info-label">Building Name:</div>
+                    <div class="info-value" id="display-building-name">Skyline Apartments</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Location:</div>
+                    <div class="info-value" id="display-location">FJV3+794 - شارع أبوظبي - الفلاح - Yas Island - YS6 - Abu Dhabi</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Owned by:</div>
+                    <div class="info-value" id="display-owned-by">Aldar Properties</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Commissioned on:</div>
+                    <div class="info-value" id="display-commissioned-on">January 15, 2021</div>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <h3>Building Statistics</h3>
+                <div class="info-item">
+                    <div class="info-label">Total Floors:</div>
+                    <div class="info-value" id="display-floors">5</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Apartments per Floor:</div>
+                    <div class="info-value" id="display-apartments-per-floor">4</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Total Apartments:</div>
+                    <div class="info-value" id="display-total-apartments">20</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Occupied:</div>
+                    <div class="info-value" id="display-occupied">0</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Vacant:</div>
+                    <div class="info-value" id="display-vacant">0</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Occupancy Rate:</div>
+                    <div class="info-value" id="display-occupancy-rate">0%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Global variables
+        let scene, camera, renderer, controls;
+        let building = [];
+        let apartments = [];
+        let raycaster, mouse;
+        let hoveredApartment = null;
+        let buildingDimensions = { floors: 0, floorHeight: 0, buildingHeight: 0 };
+        let isScrollNavigationEnabled = false;
+        let originalControlsEnabled = true;
+        
+        // Initialize Three.js scene
+        function initScene() {
+            const container = document.getElementById('canvas-container');
+            
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(
+                75, 
+                container.clientWidth / container.clientHeight, 
+                0.1, 
+                1000
+            );
+            camera.position.set(15, 15, 15);
+            camera.lookAt(0, 0, 0);
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+            
+            // Add orbit controls for rotation
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Initialize raycaster and mouse for hover detection
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // Add mouse move event listener for hover detection
+            renderer.domElement.addEventListener('mousemove', onMouseMove);
+            renderer.domElement.addEventListener('mouseleave', onMouseLeave);
+
+            // Add scroll event listener for floor navigation
+            container.addEventListener('wheel', onMouseWheel, { passive: false });
+            
+            // Add lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 15);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            
+            // Add grid for reference
+            const gridHelper = new THREE.GridHelper(20, 20);
+            scene.add(gridHelper);
+            
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+        }
+        
+        // Handle window resize
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+        
+        // Generate building based on inputs
+        function generateBuilding() {
+            // Clear existing building
+            clearBuilding();
+
+            const floors = parseInt(document.getElementById('floors').value);
+            const apartmentsPerFloor = parseInt(document.getElementById('apartments').value);
+
+            // Update building information display
+            updateBuildingInfo();
+            
+            const apartmentWidth = 2;
+            const apartmentHeight = 1;
+            const apartmentDepth = 2;
+            const floorHeight = 1.2;
+            
+            // Create building structure
+            apartments = [];
+            
+            for (let floor = 0; floor < floors; floor++) {
+                for (let apt = 0; apt < apartmentsPerFloor; apt++) {
+                    // Randomly determine if apartment is occupied (for demo)
+                    const isOccupied = Math.random() > 0.7;
+                    const color = isOccupied ? 0x00ff00 : 0xff0000; // Green if occupied, red if not
+                    
+                    const apartmentGeometry = new THREE.BoxGeometry(apartmentWidth, apartmentHeight, apartmentDepth);
+                    const apartmentMaterial = new THREE.MeshPhongMaterial({ 
+                        color: color,
+                        transparent: true,
+                        opacity: 0.9
+                    });
+                    const apartment = new THREE.Mesh(apartmentGeometry, apartmentMaterial);
+                    
+                    // Position apartment
+                    apartment.position.x = (apt - apartmentsPerFloor/2 + 0.5) * apartmentWidth;
+                    apartment.position.y = floor * floorHeight + apartmentHeight/2;
+                    apartment.position.z = 0;
+                    
+                    // Store apartment data with floor-based numbering
+                    // Floor 1: 101, 102, 103... Floor 2: 201, 202, 203...
+                    const floorBasedApartmentNumber = (floor + 1) * 100 + (apt + 1);
+                    apartment.userData = {
+                        floor: floor,
+                        apartmentNumber: floorBasedApartmentNumber,
+                        isOccupied: isOccupied
+                    };
+                    
+                    // Enable shadows
+                    apartment.castShadow = true;
+                    apartment.receiveShadow = true;
+                    
+                    apartments.push(apartment);
+                    scene.add(apartment);
+                }
+                
+                // Add floor slabs
+                const slabGeometry = new THREE.BoxGeometry(
+                    apartmentsPerFloor * apartmentWidth + 1, 
+                    0.2, 
+                    apartmentDepth + 1
+                );
+                const slabMaterial = new THREE.MeshPhongMaterial({ color: 0x888888 });
+                const slab = new THREE.Mesh(slabGeometry, slabMaterial);
+                
+                slab.position.y = floor * floorHeight;
+                slab.receiveShadow = true;
+                scene.add(slab);
+                building.push(slab);
+            }
+            
+            // Update apartment list and building stats
+            updateApartmentList();
+            updateBuildingStats();
+
+            // Store building dimensions for scroll navigation
+            buildingDimensions = {
+                floors: floors,
+                floorHeight: floorHeight,
+                buildingHeight: floors * floorHeight
+            };
+
+            // Adjust camera to fit the building
+            adjustCameraToFitBuilding(floors, apartmentsPerFloor, floorHeight, apartmentWidth);
+        }
+        
+        // Adjust camera position to fit the building in view
+        function adjustCameraToFitBuilding(floors, apartmentsPerFloor, floorHeight, apartmentWidth) {
+            // Calculate building dimensions
+            const buildingHeight = floors * floorHeight;
+            const buildingWidth = apartmentsPerFloor * apartmentWidth + 1;
+            const buildingDepth = 3; // apartment depth + slab extension
+
+            // Calculate the maximum dimension to determine camera distance
+            const maxDimension = Math.max(buildingHeight, buildingWidth, buildingDepth);
+
+            // Calculate optimal camera distance (with some padding)
+            const fov = camera.fov * (Math.PI / 180); // Convert to radians
+            const distance = (maxDimension / 2) / Math.tan(fov / 2) * 1.5; // 1.5 for padding
+
+            // Position camera to view the building optimally
+            // Place camera at an angle to see the building nicely
+            const cameraX = distance * 0.7;
+            const cameraY = buildingHeight * 0.6 + distance * 0.5; // Slightly above center
+            const cameraZ = distance * 0.7;
+
+            // Set camera position
+            camera.position.set(cameraX, cameraY, cameraZ);
+
+            // Look at the center of the building (slightly above ground)
+            const lookAtY = buildingHeight * 0.4; // Look at about 40% up the building
+            camera.lookAt(0, lookAtY, 0);
+
+            // Update controls target to the same point
+            controls.target.set(0, lookAtY, 0);
+            controls.update();
+
+            // Enable scroll navigation when camera is close enough (zoomed in)
+            checkScrollNavigationState();
+        }
+
+        // Clear existing building
+        function clearBuilding() {
+            // Remove apartments
+            apartments.forEach(apt => {
+                scene.remove(apt);
+            });
+            apartments = [];
+
+            // Remove building parts
+            building.forEach(part => {
+                scene.remove(part);
+            });
+            building = [];
+        }
+        
+        // Update apartment list in the UI
+        function updateApartmentList() {
+            const listContainer = document.getElementById('list-container');
+            listContainer.innerHTML = '';
+
+            // Group apartments by floor
+            const floors = parseInt(document.getElementById('floors').value);
+            const apartmentsPerFloor = parseInt(document.getElementById('apartments').value);
+
+            for (let floorIndex = 0; floorIndex < floors; floorIndex++) {
+                // Create floor header
+                const floorHeader = document.createElement('div');
+                floorHeader.style.cssText = `
+                    font-weight: bold;
+                    background-color: #d0d0d0;
+                    padding: 8px;
+                    margin: 10px 0 5px 0;
+                    border-radius: 4px;
+                    text-align: center;
+                `;
+                floorHeader.textContent = `Floor-${floorIndex + 1}`;
+                listContainer.appendChild(floorHeader);
+
+                
+                const floorApartments = apartments.filter(apt => apt.userData.floor === floorIndex);
+                floorApartments.forEach((apt, aptIndex) => {
+                    const globalIndex = apartments.indexOf(apt);
+                    const item = document.createElement('div');
+                    item.className = `apartment-item ${apt.userData.isOccupied ? 'occupied' : 'vacant'}`;
+
+
+                    // Use the floor-based apartment number directly
+                    const apartmentNumber = apt.userData.apartmentNumber;
+
+                    item.innerHTML = `
+                        <span>AP-#${apartmentNumber}</span>
+                        <span>${apt.userData.isOccupied ? 'Occupied' : 'Vacant'}</span>
+                    `;
+
+                    item.addEventListener('click', () => toggleApartmentOccupancy(globalIndex));
+                    listContainer.appendChild(item);
+                });
+            }
+        }
+        
+        
+        function toggleApartmentOccupancy(index) {
+            const apartment = apartments[index];
+            apartment.userData.isOccupied = !apartment.userData.isOccupied;
+
+            
+            const color = apartment.userData.isOccupied ? 0x00ff00 : 0xff0000;
+            apartment.material.color.setHex(color);
+
+            
+            updateApartmentList();
+            updateBuildingStats();
+        }
+
+        
+        function onMouseMove(event) {
+            const container = document.getElementById('canvas-container');
+            const rect = container.getBoundingClientRect();
+
+            
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            // Update raycaster
+            raycaster.setFromCamera(mouse, camera);
+
+            
+            const intersects = raycaster.intersectObjects(apartments);
+
+            if (intersects.length > 0) {
+                const intersectedApartment = intersects[0].object;
+
+                if (hoveredApartment !== intersectedApartment) {
+                    
+                    if (hoveredApartment) {
+                        resetApartmentColor(hoveredApartment);
+                    }
+
+                    
+                    hoveredApartment = intersectedApartment;
+                    highlightApartment(hoveredApartment);
+                    showTooltip(event, hoveredApartment);
+                }
+            } else {
+                
+                if (hoveredApartment) {
+                    resetApartmentColor(hoveredApartment);
+                    hoveredApartment = null;
+                }
+                hideTooltip();
+            }
+        }
+
+        function onMouseLeave() {
+            if (hoveredApartment) {
+                resetApartmentColor(hoveredApartment);
+                hoveredApartment = null;
+            }
+            hideTooltip();
+        }
+
+        function highlightApartment(apartment) {
+            apartment.material.emissive.setHex(0x444444);
+        }
+
+        function resetApartmentColor(apartment) {
+            apartment.material.emissive.setHex(0x000000);
+        }
+
+        function showTooltip(event, apartment) {
+            const tooltip = document.getElementById('tooltip');
+            const floorNumber = apartment.userData.floor + 1;
+            // Use the floor-based apartment number directly
+            const apartmentNumber = apartment.userData.apartmentNumber;
+
+            tooltip.innerHTML = `
+                <div><strong>FL-${floorNumber}</strong></div>
+                <div>AP-#${apartmentNumber}</div>
+                <div>${apartment.userData.isOccupied ? 'Occupied' : 'Vacant'}</div>
+            `;
+
+            tooltip.style.display = 'block';
+            tooltip.style.left = (event.clientX + 10) + 'px';
+            tooltip.style.top = (event.clientY - 10) + 'px';
+        }
+
+        function hideTooltip() {
+            const tooltip = document.getElementById('tooltip');
+            tooltip.style.display = 'none';
+        }
+
+        // Handle mouse wheel for floor navigation when zoomed in
+        function onMouseWheel(event) {
+            // Always check scroll navigation state first
+            checkScrollNavigationState();
+
+            if (isScrollNavigationEnabled) {
+                // Prevent default scroll behavior and OrbitControls zoom
+                event.preventDefault();
+                event.stopPropagation();
+
+                // Temporarily disable OrbitControls to prevent interference
+                controls.enabled = false;
+
+                // Calculate scroll direction and amount
+                const scrollDirection = event.deltaY > 0 ? 1 : -1;
+                const scrollAmount = buildingDimensions.floorHeight * 0.8; // Move most of a floor height per scroll
+
+                // Get current camera and target positions
+                const currentTarget = controls.target.clone();
+                const currentCameraPos = camera.position.clone();
+
+                // Calculate new target Y position
+                let newTargetY = currentTarget.y + (scrollDirection * scrollAmount);
+
+                // Clamp the target Y to stay within building bounds with some padding
+                const minY = -buildingDimensions.floorHeight * 0.5;
+                const maxY = buildingDimensions.buildingHeight + buildingDimensions.floorHeight * 0.5;
+                newTargetY = Math.max(minY, Math.min(maxY, newTargetY));
+
+                // Calculate the offset between camera and target
+                const cameraOffset = currentCameraPos.clone().sub(currentTarget);
+
+                // Smoothly animate to new position
+                animateToPosition(currentTarget, newTargetY, cameraOffset);
+
+                // Show current floor info
+                showCurrentFloorInfo(newTargetY);
+
+                // Re-enable OrbitControls after a short delay
+                setTimeout(() => {
+                    controls.enabled = true;
+                }, 100);
+            }
+        }
+
+        // Smooth animation to new camera position
+        function animateToPosition(currentTarget, newTargetY, cameraOffset) {
+            const startY = currentTarget.y;
+            const endY = newTargetY;
+            const duration = 300; // milliseconds
+            const startTime = Date.now();
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                // Use easing function for smooth animation
+                const easeProgress = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+
+                const currentY = startY + (endY - startY) * easeProgress;
+
+                // Update target and camera positions
+                controls.target.set(currentTarget.x, currentY, currentTarget.z);
+                camera.position.set(
+                    currentTarget.x + cameraOffset.x,
+                    currentY + cameraOffset.y,
+                    currentTarget.z + cameraOffset.z
+                );
+
+                controls.update();
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                }
+            }
+
+            animate();
+        }
+
+        function updateBuildingInfo() {
+            const buildingName = document.getElementById('building-name').value;
+            const location = document.getElementById('location').value;
+            const ownedBy = document.getElementById('owned-by').value;
+            const commissionedOn = document.getElementById('commissioned-on').value;
+
+            document.getElementById('display-building-name').textContent = buildingName || 'Not specified';
+            document.getElementById('display-location').textContent = location || 'Not specified';
+            document.getElementById('display-owned-by').textContent = ownedBy || 'Not specified';
+
+            if (commissionedOn) {
+                const date = new Date(commissionedOn);
+                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                document.getElementById('display-commissioned-on').textContent = date.toLocaleDateString('en-US', options);
+            } else {
+                document.getElementById('display-commissioned-on').textContent = 'Not specified';
+            }
+        }
+
+        function updateBuildingStats() {
+            const floors = parseInt(document.getElementById('floors').value);
+            const apartmentsPerFloor = parseInt(document.getElementById('apartments').value);
+            const totalApartments = floors * apartmentsPerFloor;
+
+            let occupiedCount = 0;
+            apartments.forEach(apt => {
+                if (apt.userData.isOccupied) {
+                    occupiedCount++;
+                }
+            });
+
+            const vacantCount = totalApartments - occupiedCount;
+            const occupancyRate = totalApartments > 0 ? Math.round((occupiedCount / totalApartments) * 100) : 0;
+
+            document.getElementById('display-floors').textContent = floors;
+            document.getElementById('display-apartments-per-floor').textContent = apartmentsPerFloor;
+            document.getElementById('display-total-apartments').textContent = totalApartments;
+            document.getElementById('display-occupied').textContent = occupiedCount;
+            document.getElementById('display-vacant').textContent = vacantCount;
+            document.getElementById('display-occupancy-rate').textContent = occupancyRate + '%';
+        }
+
+        // Check if scroll navigation should be enabled based on camera distance
+        function checkScrollNavigationState() {
+            if (buildingDimensions.buildingHeight === 0) {
+                isScrollNavigationEnabled = false;
+                updateInstructions();
+                return;
+            }
+
+            // Calculate distance from camera to building center
+            const buildingCenter = new THREE.Vector3(0, buildingDimensions.buildingHeight / 2, 0);
+            const cameraDistance = camera.position.distanceTo(buildingCenter);
+
+            // Enable scroll navigation when camera is close enough (zoomed in)
+            // More generous distance calculation for better user experience
+            const maxDistanceForScroll = Math.max(buildingDimensions.buildingHeight * 3, 20);
+            const wasEnabled = isScrollNavigationEnabled;
+            isScrollNavigationEnabled = cameraDistance < maxDistanceForScroll;
+
+            // Only update instructions if state changed to avoid constant updates
+            if (wasEnabled !== isScrollNavigationEnabled) {
+                updateInstructions();
+
+                // Show/hide scroll indicator
+                toggleScrollIndicator(isScrollNavigationEnabled);
+            }
+        }
+
+        // Toggle scroll indicator visibility
+        function toggleScrollIndicator(show) {
+            let scrollIndicator = document.getElementById('scroll-indicator');
+            if (!scrollIndicator && show) {
+                scrollIndicator = document.createElement('div');
+                scrollIndicator.id = 'scroll-indicator';
+                scrollIndicator.style.cssText = `
+                    position: absolute;
+                    bottom: 60px;
+                    right: 20px;
+                    background-color: rgba(0,0,0,0.7);
+                    color: white;
+                    padding: 8px 12px;
+                    border-radius: 5px;
+                    font-size: 12px;
+                    z-index: 1000;
+                    transition: opacity 0.3s;
+                `;
+                scrollIndicator.innerHTML = '↕️ Scroll to navigate floors';
+                document.getElementById('canvas-container').appendChild(scrollIndicator);
+            }
+
+            if (scrollIndicator) {
+                scrollIndicator.style.opacity = show ? '1' : '0';
+            }
+        }
+
+        // Show current floor information
+        function showCurrentFloorInfo(targetY) {
+            const currentFloor = Math.max(1, Math.ceil(targetY / buildingDimensions.floorHeight));
+            const maxFloor = buildingDimensions.floors;
+
+            // Create or update floor indicator
+            let floorIndicator = document.getElementById('floor-indicator');
+            if (!floorIndicator) {
+                floorIndicator = document.createElement('div');
+                floorIndicator.id = 'floor-indicator';
+                floorIndicator.style.cssText = `
+                    position: absolute;
+                    top: 20px;
+                    right: 20px;
+                    background-color: rgba(0,0,0,0.8);
+                    color: white;
+                    padding: 10px 15px;
+                    border-radius: 5px;
+                    font-size: 16px;
+                    font-weight: bold;
+                    z-index: 1000;
+                    transition: opacity 0.3s;
+                `;
+                document.getElementById('canvas-container').appendChild(floorIndicator);
+            }
+
+            floorIndicator.textContent = `Floor ${Math.min(currentFloor, maxFloor)} of ${maxFloor}`;
+            floorIndicator.style.opacity = '1';
+
+            // Hide after 2 seconds
+            clearTimeout(floorIndicator.hideTimeout);
+            floorIndicator.hideTimeout = setTimeout(() => {
+                floorIndicator.style.opacity = '0';
+            }, 2000);
+        }
+
+        // Update instructions based on scroll navigation state
+        function updateInstructions() {
+            const instructions = document.getElementById('instructions');
+            if (isScrollNavigationEnabled) {
+                instructions.textContent = 'Click and drag to rotate | Scroll to navigate floors | Hover over apartments for details';
+            } else {
+                instructions.textContent = 'Click and drag to rotate | Scroll to zoom | Hover over apartments for details';
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+
+            // Check scroll navigation state periodically (not every frame for performance)
+            if (Math.random() < 0.1) { // Check roughly 10% of frames
+                checkScrollNavigationState();
+            }
+
+            renderer.render(scene, camera);
+        }
+        
+        window.addEventListener('load', () => {
+            initScene();
+            generateBuilding();
+            animate();
+
+            document.getElementById('generate').addEventListener('click', generateBuilding);
+            
+            document.getElementById('building-name').addEventListener('input', updateBuildingInfo);
+            document.getElementById('location').addEventListener('input', updateBuildingInfo);
+            document.getElementById('owned-by').addEventListener('input', updateBuildingInfo);
+            document.getElementById('commissioned-on').addEventListener('input', updateBuildingInfo);
+        });
+    </script>
+</body>
+</html>
